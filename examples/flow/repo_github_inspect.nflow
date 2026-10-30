@@ -1,0 +1,4 @@
+@require github.com/nexssp/repo/nexssflow as repo
+@include repo:nflows/repo.nflow AS repo
+
+repo.pipeline.github_inspect

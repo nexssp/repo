@@ -1,0 +1,26 @@
+@description "Read-only local and GitHub repository capabilities from github.com/nexssp/repo"
+
+@description "Inspect a local Git worktree's root, branch, commit, remote, and status"
+@pipeline inspect
+  repo.inspect
+@end
+
+@description "Inspect GitHub metadata, default-branch head, latest tag/release, and CI/check status"
+@pipeline github_inspect
+  repo.github_inspect
+@end
+
+@description "List tracked and non-ignored untracked files"
+@pipeline files
+  repo.files
+@end
+
+@description "Read the tracked-file diff; pass staged=true for staged changes only"
+@pipeline diff
+  repo.diff
+@end
+
+@description "Pack bounded text files for review or model context"
+@pipeline pack
+  repo.pack
+@end

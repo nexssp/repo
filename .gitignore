@@ -1,0 +1,5 @@
+/dist/
+*.test
+*.out
+.flow-state/
+/examples/flow/flow
