@@ -95,13 +95,16 @@ func run(args []string) error {
 	return nil
 }
 
-func readRepositories(path string) ([]string, error) {
+func readRepositories(path string) (repositories []string, retErr error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-	var repositories []string
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && retErr == nil {
+			retErr = fmt.Errorf("close repository list: %w", closeErr)
+		}
+	}()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()

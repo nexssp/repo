@@ -298,7 +298,7 @@ func parseGitHubDate(value string) (time.Time, bool) {
 	return parsed, err == nil
 }
 
-func (s *Service) githubGetJSON(ctx context.Context, token, path string, target any) (int, error) {
+func (s *Service) githubGetJSON(ctx context.Context, token, path string, target any) (statusCode int, retErr error) {
 	base := strings.TrimRight(strings.TrimSpace(s.GitHub.APIBaseURL), "/")
 	if base == "" {
 		base = "https://api.github.com"
@@ -321,7 +321,11 @@ func (s *Service) githubGetJSON(ctx context.Context, token, path string, target 
 	if err != nil {
 		return 0, fmt.Errorf("GitHub request %s: %w", path, err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		if closeErr := response.Body.Close(); closeErr != nil && retErr == nil {
+			retErr = fmt.Errorf("close GitHub response: %w", closeErr)
+		}
+	}()
 	body, err := io.ReadAll(io.LimitReader(response.Body, githubBodyLimit+1))
 	if err != nil {
 		return response.StatusCode, fmt.Errorf("read GitHub response: %w", err)
