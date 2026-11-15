@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/semver"
 )
 
 const (
@@ -103,7 +107,90 @@ func (s *Service) InspectGitHub(ctx context.Context, req GitHubRequest) (GitHubI
 	result.CI = s.inspectGitHubCI(ctx, token, owner, name, result.Head.SHA)
 	result.LatestTag, result.Warnings = s.latestGitHubTag(ctx, token, owner, name, result.Head.SHA)
 	result.LatestRelease, result.Warnings = s.latestGitHubRelease(ctx, token, owner, name, result.Warnings)
+	if req.IncludeGoMod {
+		result.GoModuleRequirements, result.Warnings = s.githubGoModuleRequirements(ctx, token, owner, name, rawRepo.DefaultBranch, result.Warnings)
+	}
 	return result, nil
+}
+
+// InspectGitHubTags returns the latest tag without fetching repository, commit, or CI metadata.
+func (s *Service) InspectGitHubTags(ctx context.Context, req GitHubRequest) (GitHubTagInspection, error) {
+	owner, name, slug, err := parseGitHubRepository(req.Repository)
+	if err != nil {
+		return GitHubTagInspection{}, err
+	}
+	tag, warnings := s.latestGitHubTag(ctx, s.githubToken(ctx), owner, name, "")
+	if tag == nil && len(warnings) > 0 && strings.HasPrefix(warnings[0], "tags: ") {
+		return GitHubTagInspection{}, fmt.Errorf("inspect GitHub tags for %s: %s", slug, strings.TrimPrefix(warnings[0], "tags: "))
+	}
+	return GitHubTagInspection{Repository: slug, LatestTag: tag, Warnings: warnings}, nil
+}
+
+// LatestGitHubSemverTag returns the highest valid semantic-version tag among the first 100 tags.
+func (s *Service) LatestGitHubSemverTag(ctx context.Context, req GitHubRequest) (GitHubSemverTag, error) {
+	owner, name, slug, err := parseGitHubRepository(req.Repository)
+	if err != nil {
+		return GitHubSemverTag{}, err
+	}
+	result := GitHubSemverTag{Repository: slug}
+	var tags []struct {
+		Name string `json:"name"`
+	}
+	tagPath := githubPath("repos", owner, name, "tags") + "?per_page=100"
+	if _, err := s.githubGetJSON(ctx, s.githubToken(ctx), tagPath, &tags); err != nil {
+		result.Warnings = []string{"tags: " + err.Error()}
+		return result, nil
+	}
+	names := make([]string, len(tags))
+	for i := range tags {
+		names[i] = tags[i].Name
+	}
+	result.Version = highestGitHubSemver(names)
+	return result, nil
+}
+
+func highestGitHubSemver(names []string) string {
+	best := ""
+	for _, name := range names {
+		if semver.IsValid(name) && (best == "" || semver.Compare(name, best) > 0) {
+			best = name
+		}
+	}
+	return best
+}
+
+func (s *Service) githubGoModuleRequirements(ctx context.Context, token, owner, name, branch string, warnings []string) ([]GitHubModuleRequirement, []string) {
+	var file struct {
+		Type     string `json:"type"`
+		Encoding string `json:"encoding"`
+		Content  string `json:"content"`
+	}
+	path := githubPath("repos", owner, name, "contents", "go.mod") + "?ref=" + url.QueryEscape(branch)
+	if _, err := s.githubGetJSON(ctx, token, path, &file); err != nil {
+		var apiErr *GitHubAPIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			return nil, warnings
+		}
+		return nil, append(warnings, "go.mod: "+err.Error())
+	}
+	if file.Type != "file" || file.Encoding != "base64" {
+		return nil, append(warnings, "go.mod: GitHub returned an unsupported file representation")
+	}
+	content, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(file.Content), ""))
+	if err != nil {
+		return nil, append(warnings, "go.mod: decode base64 content: "+err.Error())
+	}
+	parsed, err := modfile.Parse("go.mod", content, nil)
+	if err != nil {
+		return nil, append(warnings, "go.mod: parse module file: "+err.Error())
+	}
+	requirements := make([]GitHubModuleRequirement, 0, len(parsed.Require))
+	for _, requirement := range parsed.Require {
+		requirements = append(requirements, GitHubModuleRequirement{
+			Path: requirement.Mod.Path, Version: requirement.Mod.Version, Indirect: requirement.Indirect,
+		})
+	}
+	return requirements, warnings
 }
 
 func (s *Service) inspectGitHubCI(ctx context.Context, token, owner, name, sha string) GitHubCI {

@@ -19,7 +19,7 @@ func TestBundleExportsRunnableModule(t *testing.T) {
 	if _, err := fs.Stat(bundle.SourceModules, bundle.ExportedModules[0]); err != nil {
 		t.Fatalf("exported module missing: %v", err)
 	}
-	if len(bundle.Libraries) != 1 || len(bundle.Libraries[0].Actions) != 6 {
+	if len(bundle.Libraries) != 1 || len(bundle.Libraries[0].Actions) != 10 {
 		t.Fatalf("unexpected action libraries: %#v", bundle.Libraries)
 	}
 	source, err := fs.ReadFile(bundle.SourceModules, bundle.ExportedModules[0])
@@ -28,6 +28,18 @@ func TestBundleExportsRunnableModule(t *testing.T) {
 	}
 	if !strings.Contains(string(source), "@pipeline github_inspect") {
 		t.Fatal("exported Flow source is missing github_inspect pipeline")
+	}
+	if !strings.Contains(string(source), "@pipeline github_tags") {
+		t.Fatal("exported Flow source is missing github_tags pipeline")
+	}
+	if !strings.Contains(string(source), "@pipeline github_normalize") {
+		t.Fatal("exported Flow source is missing github_normalize pipeline")
+	}
+	if !strings.Contains(string(source), "@pipeline github_latest_semver") {
+		t.Fatal("exported Flow source is missing github_latest_semver pipeline")
+	}
+	if !strings.Contains(string(source), "@pipeline github_module_versions") {
+		t.Fatal("exported Flow source is missing github_module_versions pipeline")
 	}
 	if !strings.Contains(string(source), "@pipeline sync") {
 		t.Fatal("exported Flow source is missing sync pipeline")

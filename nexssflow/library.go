@@ -49,9 +49,27 @@ func Bundle(_ map[string]string) compiler.Bundle {
 		return objectMap(result, err)
 	}).Description("Collect bounded text-file contents from a Git repository").Build()
 	githubInspect := action.New("repo.github_inspect", func(ctx context.Context, in map[string]any) (map[string]any, error) {
-		result, err := provider.InspectGitHub(ctx, repository.GitHubRequest{Repository: stringValue(in, "repository")})
+		result, err := provider.InspectGitHub(ctx, repository.GitHubRequest{
+			Repository: stringValue(in, "repository"), IncludeGoMod: boolValue(in, "include_go_mod"),
+		})
 		return objectMap(result, err)
 	}).Description("Inspect GitHub repository metadata, head, tags/releases, and CI status").Build()
+	githubTags := action.New("repo.github_tags", func(ctx context.Context, in map[string]any) (map[string]any, error) {
+		result, err := provider.InspectGitHubTags(ctx, repository.GitHubRequest{Repository: stringValue(in, "repository")})
+		return objectMap(result, err)
+	}).Description("Inspect the newest GitHub repository tag without fetching commit or CI metadata").Build()
+	githubNormalize := action.New("repo.github_normalize", func(_ context.Context, in map[string]any) (map[string]any, error) {
+		result, err := repository.NormalizeGitHubRepository(stringValue(in, "repository"))
+		return objectMap(result, err)
+	}).Description("Validate and normalize a GitHub repository reference without network access").Build()
+	githubLatestSemver := action.New("repo.github_latest_semver", func(ctx context.Context, in map[string]any) (map[string]any, error) {
+		result, err := provider.LatestGitHubSemverTag(ctx, repository.GitHubRequest{Repository: stringValue(in, "repository")})
+		return objectMap(result, err)
+	}).Description("Find the highest Go-module-valid semantic-version GitHub tag").Build()
+	githubModuleVersions := action.New[repository.GitHubModuleVersionRequest, repository.GitHubModuleVersionResult](
+		"repo.github_module_versions", func(_ context.Context, req repository.GitHubModuleVersionRequest) (repository.GitHubModuleVersionResult, error) {
+			return repository.CompareGitHubModuleVersions(req), nil
+		}).Description("Compare go.mod requirements against caller-supplied latest module versions").Build()
 	sync := action.New("repo.sync", func(ctx context.Context, in map[string]any) (map[string]any, error) {
 		result, err := provider.Sync(ctx, repository.SyncRequest{Root: stringValue(in, "root"), Remote: stringValue(in, "remote")})
 		return objectMap(result, err)
@@ -61,7 +79,7 @@ func Bundle(_ map[string]string) compiler.Bundle {
 		ID: ID,
 		Libraries: []action.Library{{
 			Name:    ID,
-			Actions: []action.AnyAction{inspect, files, diff, pack, sync, githubInspect},
+			Actions: []action.AnyAction{inspect, files, diff, pack, sync, githubInspect, githubTags, githubNormalize, githubLatestSemver, githubModuleVersions},
 		}},
 		SourceModules:   sources,
 		ExportedModules: []string{"nflows/repo.nflow"},

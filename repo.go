@@ -145,19 +145,22 @@ type PackResult struct {
 }
 
 // GitHubRequest identifies a public or token-accessible GitHub repository. It
-// accepts owner/name, a github.com repository URL, or an SSH clone URL.
+// accepts owner/name, a github.com repository URL, or an SSH clone URL. Set
+// IncludeGoMod to include parsed dependency requirements when go.mod is present.
 type GitHubRequest struct {
-	Repository string `json:"repository"`
+	Repository   string `json:"repository"`
+	IncludeGoMod bool   `json:"include_go_mod,omitempty"`
 }
 
 // GitHubInspection contains the narrow metadata set needed by repopeek.
 type GitHubInspection struct {
-	Repository    GitHubRepository `json:"repository"`
-	Head          GitHubCommit     `json:"head"`
-	LatestTag     *GitHubTag       `json:"latest_tag,omitempty"`
-	LatestRelease *GitHubRelease   `json:"latest_release,omitempty"`
-	CI            GitHubCI         `json:"ci"`
-	Warnings      []string         `json:"warnings,omitempty"`
+	Repository           GitHubRepository          `json:"repository"`
+	Head                 GitHubCommit              `json:"head"`
+	LatestTag            *GitHubTag                `json:"latest_tag,omitempty"`
+	LatestRelease        *GitHubRelease            `json:"latest_release,omitempty"`
+	CI                   GitHubCI                  `json:"ci"`
+	GoModuleRequirements []GitHubModuleRequirement `json:"go_module_requirements,omitempty"`
+	Warnings             []string                  `json:"warnings,omitempty"`
 }
 
 type GitHubRepository struct {
@@ -186,6 +189,27 @@ type GitHubTag struct {
 	SHA    string `json:"sha"`
 	Date   string `json:"date,omitempty"`
 	OnHead bool   `json:"on_head"`
+}
+
+// GitHubModuleRequirement is one requirement parsed from the repository's go.mod.
+type GitHubModuleRequirement struct {
+	Path     string `json:"path"`
+	Version  string `json:"version"`
+	Indirect bool   `json:"indirect,omitempty"`
+}
+
+// GitHubTagInspection contains the latest tag data without commit or CI details.
+type GitHubTagInspection struct {
+	Repository string     `json:"repository"`
+	LatestTag  *GitHubTag `json:"latest_tag,omitempty"`
+	Warnings   []string   `json:"warnings,omitempty"`
+}
+
+// GitHubSemverTag contains the highest valid Go-module semantic-version tag.
+type GitHubSemverTag struct {
+	Repository string   `json:"repository"`
+	Version    string   `json:"version,omitempty"`
+	Warnings   []string `json:"warnings,omitempty"`
 }
 
 type GitHubRelease struct {

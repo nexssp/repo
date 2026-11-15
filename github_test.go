@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -105,6 +106,109 @@ func TestInspectGitHub(t *testing.T) {
 	}
 	if len(result.Warnings) != 0 || len(result.CI.Warnings) != 0 {
 		t.Fatalf("unexpected warnings: result=%v ci=%v", result.Warnings, result.CI.Warnings)
+	}
+}
+
+func TestInspectGitHubIncludesGoModuleRequirements(t *testing.T) {
+	const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	goMod := "module github.com/acme/api\n\nrequire (\n\tgithub.com/nexssp/kernel v0.38.0\n\tgithub.com/nexssp/flow v0.72.0 // indirect\n\texample.com/tool v1.2.3\n)\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/acme/api":
+			writeJSONTest(t, w, map[string]any{"full_name": "acme/api", "default_branch": "main"})
+		case "/repos/acme/api/commits/main":
+			writeJSONTest(t, w, map[string]any{"sha": headSHA, "commit": map[string]any{"message": "head"}})
+		case "/repos/acme/api/commits/" + headSHA + "/check-runs", "/repos/acme/api/commits/" + headSHA + "/status":
+			writeJSONTest(t, w, map[string]any{})
+		case "/repos/acme/api/tags":
+			writeJSONTest(t, w, []any{})
+		case "/repos/acme/api/releases/latest":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+		case "/repos/acme/api/contents/go.mod":
+			if got := r.URL.Query().Get("ref"); got != "main" {
+				t.Errorf("go.mod ref = %q, want main", got)
+			}
+			writeJSONTest(t, w, map[string]any{
+				"type": "file", "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(goMod)),
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	service := New()
+	service.GitHub = GitHubOptions{APIBaseURL: server.URL, HTTPClient: server.Client()}
+	result, err := service.InspectGitHub(context.Background(), GitHubRequest{Repository: "acme/api", IncludeGoMod: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.GoModuleRequirements) != 3 {
+		t.Fatalf("go.mod requirements = %+v, want three entries", result.GoModuleRequirements)
+	}
+	if got := result.GoModuleRequirements[0]; got.Path != "github.com/nexssp/kernel" || got.Version != "v0.38.0" || got.Indirect {
+		t.Errorf("kernel requirement = %+v", got)
+	}
+	if got := result.GoModuleRequirements[1]; got.Path != "github.com/nexssp/flow" || got.Version != "v0.72.0" || !got.Indirect {
+		t.Errorf("flow requirement = %+v", got)
+	}
+}
+
+func TestInspectGitHubTagsUsesTagOnlyProviderPath(t *testing.T) {
+	const tagSHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/acme/api/tags":
+			if got := r.URL.Query().Get("per_page"); got != "10" {
+				t.Errorf("tags per_page = %q, want 10", got)
+			}
+			writeJSONTest(t, w, []map[string]any{{"name": "v1.0.0", "commit": map[string]string{"sha": tagSHA}}})
+		case "/repos/acme/api/commits/" + tagSHA:
+			writeJSONTest(t, w, map[string]any{"commit": map[string]any{"committer": map[string]string{"date": "2026-02-01T00:00:00Z"}}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	service := New()
+	service.GitHub = GitHubOptions{APIBaseURL: server.URL, HTTPClient: server.Client()}
+	result, err := service.InspectGitHubTags(context.Background(), GitHubRequest{Repository: "acme/api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Repository != "acme/api" || result.LatestTag == nil || result.LatestTag.Name != "v1.0.0" {
+		t.Fatalf("unexpected tag-only result: %+v", result)
+	}
+}
+
+func TestLatestGitHubSemverTag(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/repos/acme/api/tags" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("per_page"); got != "100" {
+			t.Errorf("tags per_page = %q, want 100", got)
+		}
+		writeJSONTest(t, w, []map[string]string{
+			{"name": "v1.10.0"}, {"name": "v2.0.0-rc.1"}, {"name": "v2.0.0"}, {"name": "not-a-version"},
+		})
+	}))
+	defer server.Close()
+
+	service := New()
+	service.GitHub = GitHubOptions{APIBaseURL: server.URL, HTTPClient: server.Client()}
+	result, err := service.LatestGitHubSemverTag(context.Background(), GitHubRequest{Repository: "acme/api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Repository != "acme/api" || result.Version != "v2.0.0" || len(result.Warnings) != 0 {
+		t.Fatalf("unexpected semver result: %+v", result)
 	}
 }
 
@@ -231,6 +335,38 @@ func TestParseGitHubRepository(t *testing.T) {
 				t.Fatalf("parseGitHubRepository(%q) = %q, %v; want %q", tt.input, got, err, tt.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeGitHubRepository(t *testing.T) {
+	result, err := NormalizeGitHubRepository("https://github.com/acme/api.git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Owner != "acme" || result.Name != "api" || result.FullName != "acme/api" || result.HTMLURL != "https://github.com/acme/api" {
+		t.Fatalf("unexpected normalized repository: %+v", result)
+	}
+}
+
+func TestGitHubModuleVersionStatuses(t *testing.T) {
+	requirements := []GitHubModuleRequirement{
+		{Path: "github.com/nexssp/kernel", Version: "v0.38.0"},
+		{Path: "github.com/nexssp/flow", Version: "v0.67.0"},
+	}
+	latest := []GitHubModuleLatestVersion{
+		{Path: "github.com/nexssp/kernel", Version: "v0.40.9"},
+		{Path: "github.com/nexssp/flow", Version: "v0.71.0"},
+		{Path: "example.com/not-required", Version: "v1.0.0"},
+	}
+	got := GitHubModuleVersionStatuses(requirements, latest)
+	if len(got) != 2 || got[0].Severity != "old" || got[1].Severity != "stale" {
+		t.Fatalf("module version statuses = %+v, want old and stale", got)
+	}
+	if ClassifyGoModuleVersion("v1.2.0", "v1.2.9") != "current" ||
+		ClassifyGoModuleVersion("v2.0.0", "v3.0.0") != "stale" ||
+		ClassifyGoModuleVersion("bad", "v1.0.0") != "old" ||
+		ClassifyGoModuleVersion("", "v1.0.0") != "absent" {
+		t.Fatal("unexpected module-version classification")
 	}
 }
 

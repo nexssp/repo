@@ -19,11 +19,13 @@ go run ./cmd/repopeek nexssp/flow
 
 ## GitHub data
 
-`Provider.InspectGitHub` returns one typed result with repository metadata (name, description, URL, visibility, default branch, stars, forks, language, archive state and last-push time), the default-branch head commit (SHA, date, subject and URL), the latest tag and latest full release when available, and CI/check information.
+`Provider.InspectGitHub` returns one typed result with repository metadata (name, description, URL, visibility, default branch, stars, forks, language, archive state and last-push time), the default-branch head commit (SHA, date, subject and URL), the latest tag and latest full release when available, and CI/check information. Set `GitHubRequest.IncludeGoMod` to also parse every requirement in the default branch's `go.mod`; a missing file is normal, while fetch/decode problems are reported as warnings.
 
 The latest tag is selected by commit date from up to the first ten tags and includes its SHA, date and whether it points at HEAD. The release field comes from GitHub's latest-release endpoint, which reports the latest published non-draft, non-prerelease release. CI combines Actions check runs with legacy commit statuses. `ci.state` is `PASSED`, `FAILED`, `RUNNING`, `NO CI` or `UNKNOWN`; the response also includes the check/status details, truncation flag and warnings when an endpoint could not be read.
 
 Public repositories can be queried without authentication, subject to GitHub's unauthenticated rate limit. For higher limits or private repositories, set `GITHUB_TOKEN` or `GH_TOKEN`, or authenticate with `gh auth login`; the provider uses `gh auth token` as a fallback and never prints the token. The REST client uses GitHub's current API-version header (`2026-03-10`). See GitHub's docs for [repository metadata](https://docs.github.com/rest/repos/repos#get-a-repository), [tags](https://docs.github.com/rest/repos/repos#list-repository-tags), [latest release](https://docs.github.com/rest/releases/releases#get-the-latest-release), [check runs](https://docs.github.com/rest/checks/runs#list-check-runs-for-a-git-reference) and [combined commit status](https://docs.github.com/rest/commits/statuses#get-the-combined-status-for-a-specific-reference).
+
+The concrete `*repo.Service` also provides `InspectGitHubTags` for a tags-only lookup and `LatestGitHubSemverTag` for the highest Go-module-valid semver among the first 100 GitHub tags. These methods share the provider's token lookup and HTTP client; they are not added to the `Provider` interface, so existing provider implementations remain source-compatible. `NormalizeGitHubRepository` validates common GitHub URL/name forms and returns a canonical `owner/name` reference without network access. `GitHubModuleVersionStatuses` compares parsed `go.mod` requirements with caller-supplied latest versions using the RepoPeek-compatible major/minor badge policy.
 
 ## Go API
 
@@ -37,7 +39,9 @@ diff, err := provider.Diff(ctx, repo.DiffRequest{Root: "."})
 changes, err := provider.ChangedPaths(ctx, repo.ChangedPathsRequest{Root: ".", Modified: true, Staged: true})
 pack, err := provider.Pack(ctx, repo.PackRequest{Root: ".", MaxFiles: 100, MaxBytes: 500_000})
 sync, err := provider.Sync(ctx, repo.SyncRequest{Root: ".", Remote: "origin"})
-github, err := provider.InspectGitHub(ctx, repo.GitHubRequest{Repository: "owner/name"})
+github, err := provider.InspectGitHub(ctx, repo.GitHubRequest{Repository: "owner/name", IncludeGoMod: true})
+tags, err := provider.InspectGitHubTags(ctx, repo.GitHubRequest{Repository: "owner/name"})
+latest, err := provider.LatestGitHubSemverTag(ctx, repo.GitHubRequest{Repository: "nexssp/kernel"})
 ```
 
 `ChangedPaths` returns sorted, unique absolute paths. `Modified` includes tracked changes against `HEAD` and non-ignored untracked files; `Since` compares the working tree with a base revision and takes precedence over `Modified`; `Staged` adds index-to-`HEAD` paths. The path list uses NUL-delimited Git output, so filenames containing spaces or newlines are preserved.
@@ -62,7 +66,11 @@ Replace `v0.1.0` with the release version you use. The exported pipelines are:
 | Pipeline | Action | Input fields |
 | --- | --- | --- |
 | `repo.pipeline.inspect` | `repo.inspect` | `root` |
-| `repo.pipeline.github_inspect` | `repo.github_inspect` | `repository` |
+| `repo.pipeline.github_inspect` | `repo.github_inspect` | `repository`, optional `include_go_mod` |
+| `repo.pipeline.github_tags` | `repo.github_tags` | `repository` |
+| `repo.pipeline.github_normalize` | `repo.github_normalize` | `repository` |
+| `repo.pipeline.github_latest_semver` | `repo.github_latest_semver` | `repository` |
+| `repo.pipeline.github_module_versions` | `repo.github_module_versions` | `requirements`, `latest_versions` |
 | `repo.pipeline.files` | `repo.files` | `root`, optional `path` |
 | `repo.pipeline.diff` | `repo.diff` | `root`, optional `staged`, `max_bytes` |
 | `repo.pipeline.pack` | `repo.pack` | `root`, optional `path`, `max_files`, `max_bytes` |

@@ -10,6 +10,26 @@
   repo.github_inspect
 @end
 
+@description "Inspect a GitHub repository's latest tag without fetching commit or CI metadata"
+@pipeline github_tags
+  repo.github_tags
+@end
+
+@description "Validate and normalize a GitHub repository reference without network access"
+@pipeline github_normalize
+  repo.github_normalize
+@end
+
+@description "Find the highest Go-module-valid semantic-version tag in a GitHub repository"
+@pipeline github_latest_semver
+  repo.github_latest_semver
+@end
+
+@description "Compare a repository's go.mod versions with latest versions supplied by the caller"
+@pipeline github_module_versions
+  repo.github_module_versions
+@end
+
 @description "List tracked and non-ignored untracked files"
 @pipeline files
   repo.files
