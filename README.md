@@ -1,6 +1,6 @@
 # Nexss Repository Capabilities
 
-A read-only Go module for local Git and GitHub repository inspection. Its typed `Provider` is the common contract for thin consumers: `repopeek` uses GitHub inspection, while `srcpack` can reuse local `Files`, `Diff`, and `Pack` without reimplementing Git traversal or safety limits. Nexss Flow loads the same provider through the `nexssflow/` bundle and its embedded `.nflow` definitions.
+A read-only Go module for local Git and GitHub repository inspection. Its typed `Provider` is the common contract for thin consumers: `repopeek` uses GitHub inspection, while `srcpack` can reuse local `Files`, `Diff`, and `Pack` without reimplementing Git traversal or safety limits. `Sync` compares local branch heads and tags with a remote so publishing workflows can verify that everything is pushed. Nexss Flow loads the same provider through the `nexssflow/` bundle and its embedded `.nflow` definitions.
 
 ## Quick start
 
@@ -9,12 +9,13 @@ go run ./cmd/repo inspect --root .
 go run ./cmd/repo files --root . --path src
 go run ./cmd/repo diff --root .
 go run ./cmd/repo pack --root . --max-files 100 --max-bytes 500000
+go run ./cmd/repo sync --root . --remote origin
 
 go run ./cmd/repo github nexssp/flow
 go run ./cmd/repopeek nexssp/flow
 ```
 
-`repo` emits JSON on stdout and diagnostics on stderr. Local commands are read-only. `files` returns tracked and non-ignored untracked files. `diff` reports tracked changes against `HEAD` by default, or staged changes with `--staged`; it does not synthesize patches for untracked files. `pack` reads text files only, skips symlinks and binary files, and enforces file/byte limits. `repopeek` accepts one or more `owner/name` values or GitHub repository URLs; `-f repos.txt` reads a list, one repository per line, with blank lines and `#` comments ignored.
+`repo` emits JSON on stdout and diagnostics on stderr. Local commands are read-only. `files` returns tracked and non-ignored untracked files. `diff` reports tracked changes against `HEAD` by default, or staged changes with `--staged`; it does not synthesize patches for untracked files. `pack` reads text files only, skips symlinks and binary files, and enforces file/byte limits. `sync` reads remote refs with `git ls-remote` — without fetching — and reports whether the local `HEAD` matches the remote branch, ahead/behind counts when both sides are known locally, and whether every local tag exists on the remote with the same object ID. `repopeek` accepts one or more `owner/name` values or GitHub repository URLs; `-f repos.txt` reads a list, one repository per line, with blank lines and `#` comments ignored.
 
 ## GitHub data
 
@@ -34,8 +35,11 @@ summary, err := provider.Inspect(ctx, repo.InspectRequest{Root: "."})
 files, err := provider.Files(ctx, repo.FilesRequest{Root: ".", Path: "src"})
 diff, err := provider.Diff(ctx, repo.DiffRequest{Root: "."})
 pack, err := provider.Pack(ctx, repo.PackRequest{Root: ".", MaxFiles: 100, MaxBytes: 500_000})
+sync, err := provider.Sync(ctx, repo.SyncRequest{Root: ".", Remote: "origin"})
 github, err := provider.InspectGitHub(ctx, repo.GitHubRequest{Repository: "owner/name"})
 ```
+
+`SyncResult.Synced` is true when the local head matches the remote branch head and no local tag is missing or diverged on the remote; shallow or partial clones get `counts_known=false` and a warning instead of guessed ahead/behind numbers.
 
 `Provider` is the small interface intended for tests and consumers. Git is executed with argument vectors (never through a shell), optional index refresh is disabled, GitHub requests are read-only, and response bodies and timeouts are bounded.
 
@@ -59,6 +63,7 @@ Replace `v0.1.0` with the release version you use. The exported pipelines are:
 | `repo.pipeline.files` | `repo.files` | `root`, optional `path` |
 | `repo.pipeline.diff` | `repo.diff` | `root`, optional `staged`, `max_bytes` |
 | `repo.pipeline.pack` | `repo.pack` | `root`, optional `path`, `max_files`, `max_bytes` |
+| `repo.pipeline.sync` | `repo.sync` | `root`, optional `remote` (defaults to `origin`) |
 
 For immediate local use before publishing, [`examples/flow/`](examples/flow/) statically links the bundle and includes both local and GitHub examples.
 

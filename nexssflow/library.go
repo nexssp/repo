@@ -52,12 +52,16 @@ func Bundle(_ map[string]string) compiler.Bundle {
 		result, err := provider.InspectGitHub(ctx, repository.GitHubRequest{Repository: stringValue(in, "repository")})
 		return objectMap(result, err)
 	}).Description("Inspect GitHub repository metadata, head, tags/releases, and CI status").Build()
+	sync := action.New("repo.sync", func(ctx context.Context, in map[string]any) (map[string]any, error) {
+		result, err := provider.Sync(ctx, repository.SyncRequest{Root: stringValue(in, "root"), Remote: stringValue(in, "remote")})
+		return objectMap(result, err)
+	}).Description("Compare the local branch head and tags with a Git remote without mutating anything").Build()
 
 	return compiler.Bundle{
 		ID: ID,
 		Libraries: []action.Library{{
 			Name:    ID,
-			Actions: []action.AnyAction{inspect, files, diff, pack, githubInspect},
+			Actions: []action.AnyAction{inspect, files, diff, pack, sync, githubInspect},
 		}},
 		SourceModules:   sources,
 		ExportedModules: []string{"nflows/repo.nflow"},

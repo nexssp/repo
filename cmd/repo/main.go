@@ -29,6 +29,7 @@ func run(args []string) error {
 	flags.SetOutput(os.Stderr)
 	root := flags.String("root", ".", "repository path (default: current directory)")
 	path := flags.String("path", "", "optional path inside the repository")
+	remote := flags.String("remote", "origin", "for sync, the Git remote to compare against")
 	staged := flags.Bool("staged", false, "for diff, show staged changes only")
 	maxFiles := flags.Int("max-files", repository.DefaultMaxFiles, "pack file limit")
 	maxBytes := flags.Int("max-bytes", 0, "byte limit (uses the operation-specific default when omitted)")
@@ -60,6 +61,8 @@ func run(args []string) error {
 		value, err = service.Diff(ctx, repository.DiffRequest{Root: *root, Staged: *staged, MaxBytes: *maxBytes})
 	case "pack":
 		value, err = service.Pack(ctx, repository.PackRequest{Root: *root, Path: *path, MaxFiles: *maxFiles, MaxBytes: *maxBytes})
+	case "sync":
+		value, err = service.Sync(ctx, repository.SyncRequest{Root: *root, Remote: *remote})
 	case "github":
 		value, err = service.InspectGitHub(ctx, repository.GitHubRequest{Repository: positional[0]})
 	default:
@@ -75,12 +78,13 @@ func run(args []string) error {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, `Usage: repo <inspect|files|diff|pack|github> [flags]
+	fmt.Fprintln(os.Stderr, `Usage: repo <inspect|files|diff|pack|sync|github> [flags]
 
 All commands emit JSON and are read-only.
   repo inspect [--root .]
   repo files   [--root .] [--path src]
-	repo diff    [--root .] [--staged] [--max-bytes 2097152]
-	repo pack    [--root .] [--path src] [--max-files 200] [--max-bytes 1048576]
-	repo github  owner/name-or-github-url`)
+        repo diff    [--root .] [--staged] [--max-bytes 2097152]
+        repo pack    [--root .] [--path src] [--max-files 200] [--max-bytes 1048576]
+        repo sync    [--root .] [--remote origin]
+        repo github  owner/name-or-github-url`)
 }

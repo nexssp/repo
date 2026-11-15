@@ -29,7 +29,9 @@ No srcpack source was migrated in this handoff. The available copy at `/workspac
 
 ## Nexss Flow
 
-The `nexssflow` package in this module exposes `repo.inspect`, `repo.github_inspect`, `repo.files`, `repo.diff`, and `repo.pack`, plus the corresponding `repo.pipeline.*` definitions in `nexssflow/nflows/repo.nflow`. The checked-in `examples/flow` host links the local bundle so the examples can run before publishing. Published flows can use `@require github.com/nexssp/repo <version> as repo` and include `repo:nflows/repo.nflow`.
+The `nexssflow` package in this module exposes `repo.inspect`, `repo.github_inspect`, `repo.files`, `repo.diff`, `repo.pack`, and `repo.sync`, plus the corresponding `repo.pipeline.*` definitions in `nexssflow/nflows/repo.nflow`. The checked-in `examples/flow` host links the local bundle so the examples can run before publishing. Published flows can use `@require github.com/nexssp/repo <version> as repo` and include `repo:nflows/repo.nflow`.
+
+`repo.sync` exists for publishing workflows: it answers "is my branch head and every tag pushed?" with `git ls-remote` alone, so a release checklist can verify all ecosystem repositories without mutating any of them. Consumers that previously shelled out to `git status -sb` plus `git push --dry-run` checks can replace both with one typed call.
 
 ## Deliberately deferred
 

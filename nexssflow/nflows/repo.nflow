@@ -24,3 +24,8 @@
 @pipeline pack
   repo.pack
 @end
+
+@description "Compare the local branch head and tags with a Git remote; read-only, reports pushed state"
+@pipeline sync
+  repo.sync
+@end

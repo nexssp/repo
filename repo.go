@@ -12,6 +12,7 @@ const (
 	DefaultMaxFiles  = 200
 	DefaultMaxBytes  = 1 << 20
 	DefaultDiffBytes = 2 << 20
+	DefaultRefsBytes = 2 << 20
 )
 
 // Provider is the shared repository capability surface used by repopeek and
@@ -21,6 +22,7 @@ type Provider interface {
 	Files(context.Context, FilesRequest) (FilesResult, error)
 	Diff(context.Context, DiffRequest) (DiffResult, error)
 	Pack(context.Context, PackRequest) (PackResult, error)
+	Sync(context.Context, SyncRequest) (SyncResult, error)
 	InspectGitHub(context.Context, GitHubRequest) (GitHubInspection, error)
 }
 
