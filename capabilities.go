@@ -25,6 +25,9 @@ func (s *Service) git(ctx context.Context, dir string, args ...string) ([]byte, 
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
 			message = err.Error()
@@ -183,6 +186,72 @@ func (s *Service) Diff(ctx context.Context, req DiffRequest) (DiffResult, error)
 	}
 	result := DiffResult{Root: root, Base: base, Patch: string(patch), Truncated: truncated}
 	result.Files, result.Added, result.Removed = diffCounts(result.Patch)
+	return result, nil
+}
+
+// ChangedPaths returns the sorted union of paths selected by the requested Git
+// changes. Modified includes non-ignored untracked paths; Since compares the
+// working tree against that revision and suppresses Modified's untracked list.
+// Staged adds paths changed between the index and HEAD.
+func (s *Service) ChangedPaths(ctx context.Context, req ChangedPathsRequest) (ChangedPathsResult, error) {
+	root, err := s.repositoryRoot(ctx, req.Root)
+	if err != nil {
+		return ChangedPathsResult{}, err
+	}
+	result := ChangedPathsResult{Root: root, Paths: make([]string, 0)}
+	seen := make(map[string]struct{})
+	addPaths := func(output []byte) {
+		for _, raw := range bytes.Split(output, []byte{0}) {
+			if len(raw) == 0 {
+				continue
+			}
+			path := filepath.Clean(filepath.Join(root, filepath.FromSlash(string(raw))))
+			seen[path] = struct{}{}
+		}
+	}
+
+	if req.Since != "" {
+		base, err := s.git(ctx, root, "rev-parse", "--verify", "--end-of-options", req.Since)
+		if err != nil {
+			return ChangedPathsResult{}, fmt.Errorf("resolve Git since revision %q: %w", req.Since, err)
+		}
+		ref := strings.TrimSpace(string(base))
+		output, err := s.git(ctx, root, "diff", "--name-only", "-z", "--no-ext-diff", "--no-renames", ref)
+		if err != nil {
+			return ChangedPathsResult{}, fmt.Errorf("git diff changed paths since %q: %w", req.Since, err)
+		}
+		addPaths(output)
+	} else if req.Modified {
+		args := []string{"diff", "--name-only", "-z", "--no-ext-diff", "--no-renames", "HEAD"}
+		output, err := s.git(ctx, root, args...)
+		if err != nil && ctx.Err() == nil {
+			// An unborn repository has no HEAD; retain the working-tree-only fallback.
+			output, err = s.git(ctx, root, "diff", "--name-only", "-z", "--no-ext-diff", "--no-renames")
+		}
+		if err != nil {
+			return ChangedPathsResult{}, fmt.Errorf("git diff changed paths: %w", err)
+		}
+		addPaths(output)
+
+		untracked, err := s.git(ctx, root, "ls-files", "--others", "--exclude-standard", "-z")
+		if err != nil {
+			return ChangedPathsResult{}, fmt.Errorf("git ls-files untracked paths: %w", err)
+		}
+		addPaths(untracked)
+	}
+
+	if req.Staged {
+		output, err := s.git(ctx, root, "diff", "--name-only", "-z", "--no-ext-diff", "--no-renames", "--cached")
+		if err != nil {
+			return ChangedPathsResult{}, fmt.Errorf("git diff staged paths: %w", err)
+		}
+		addPaths(output)
+	}
+
+	for path := range seen {
+		result.Paths = append(result.Paths, path)
+	}
+	sort.Strings(result.Paths)
 	return result, nil
 }
 

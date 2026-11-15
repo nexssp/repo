@@ -21,6 +21,7 @@ type Provider interface {
 	Inspect(context.Context, InspectRequest) (Inspection, error)
 	Files(context.Context, FilesRequest) (FilesResult, error)
 	Diff(context.Context, DiffRequest) (DiffResult, error)
+	ChangedPaths(context.Context, ChangedPathsRequest) (ChangedPathsResult, error)
 	Pack(context.Context, PackRequest) (PackResult, error)
 	Sync(context.Context, SyncRequest) (SyncResult, error)
 	InspectGitHub(context.Context, GitHubRequest) (GitHubInspection, error)
@@ -98,6 +99,21 @@ type DiffResult struct {
 	Added     int    `json:"lines_added"`
 	Removed   int    `json:"lines_removed"`
 	Truncated bool   `json:"truncated"`
+}
+
+// ChangedPathsRequest selects changed paths in a local working tree. Since,
+// when set, takes precedence over Modified; Staged is additive to either.
+type ChangedPathsRequest struct {
+	Root     string `json:"root,omitempty"`
+	Since    string `json:"since,omitempty"`    // Optional base revision for the working-tree diff.
+	Modified bool   `json:"modified,omitempty"` // HEAD-to-working-tree changes plus non-ignored untracked paths.
+	Staged   bool   `json:"staged,omitempty"`   // Add index-to-HEAD changes.
+}
+
+// ChangedPathsResult returns sorted, unique absolute paths selected by Git.
+type ChangedPathsResult struct {
+	Root  string   `json:"root"`
+	Paths []string `json:"paths"`
 }
 
 type PackRequest struct {

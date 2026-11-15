@@ -1,6 +1,6 @@
 # Nexss Repository Capabilities
 
-A read-only Go module for local Git and GitHub repository inspection. Its typed `Provider` is the common contract for thin consumers: `repopeek` uses GitHub inspection, while `srcpack` can reuse local `Files`, `Diff`, and `Pack` without reimplementing Git traversal or safety limits. `Sync` compares local branch heads and tags with a remote so publishing workflows can verify that everything is pushed. Nexss Flow loads the same provider through the `nexssflow/` bundle and its embedded `.nflow` definitions.
+A read-only Go module for local Git and GitHub repository inspection. Its typed `Provider` is the common contract for thin consumers: `repopeek` uses GitHub inspection, while `srcpack` can reuse local `Files`, `ChangedPaths`, `Diff`, and `Pack` without reimplementing Git traversal or safety limits. `Sync` compares local branch heads and tags with a remote so publishing workflows can verify that everything is pushed. Nexss Flow loads the same provider through the `nexssflow/` bundle and its embedded `.nflow` definitions.
 
 ## Quick start
 
@@ -34,10 +34,13 @@ provider := repo.New()
 summary, err := provider.Inspect(ctx, repo.InspectRequest{Root: "."})
 files, err := provider.Files(ctx, repo.FilesRequest{Root: ".", Path: "src"})
 diff, err := provider.Diff(ctx, repo.DiffRequest{Root: "."})
+changes, err := provider.ChangedPaths(ctx, repo.ChangedPathsRequest{Root: ".", Modified: true, Staged: true})
 pack, err := provider.Pack(ctx, repo.PackRequest{Root: ".", MaxFiles: 100, MaxBytes: 500_000})
 sync, err := provider.Sync(ctx, repo.SyncRequest{Root: ".", Remote: "origin"})
 github, err := provider.InspectGitHub(ctx, repo.GitHubRequest{Repository: "owner/name"})
 ```
+
+`ChangedPaths` returns sorted, unique absolute paths. `Modified` includes tracked changes against `HEAD` and non-ignored untracked files; `Since` compares the working tree with a base revision and takes precedence over `Modified`; `Staged` adds index-to-`HEAD` paths. The path list uses NUL-delimited Git output, so filenames containing spaces or newlines are preserved.
 
 `SyncResult.Synced` is true when the local head matches the remote branch head and no local tag is missing or diverged on the remote; shallow or partial clones get `counts_known=false` and a warning instead of guessed ahead/behind numbers.
 
@@ -69,4 +72,4 @@ For immediate local use before publishing, [`examples/flow/`](examples/flow/) st
 
 ## Consumer boundaries
 
-`repopeek` and `srcpack` remain separate applications but have one shared Go capability contract. `cmd/repopeek` is a thin GitHub JSON frontend backed by `Provider.InspectGitHub`; `srcpack` can use `Provider.Files`, `Provider.Diff` and `Provider.Pack` while retaining its own selectors, language analysis, rendering and CLI policy. The available srcpack source tree was left untouched because it has no Git metadata; no consumer migration was silently claimed. The first pass intentionally excludes persistent API caching, curated package inventories, dependency-version dashboards, terminal themes, Bitbucket and Scion. No `nexss_tooler` checkout was available here.
+`repopeek` and `srcpack` remain separate applications but have one shared Go capability contract. `cmd/repopeek` is a thin GitHub JSON frontend backed by `Provider.InspectGitHub`; `srcpack` can use `Provider.Files`, `Provider.ChangedPaths`, `Provider.Diff` and `Provider.Pack` while retaining its own selectors, language analysis, rendering and CLI policy. The available srcpack source tree was left untouched because it has no Git metadata; no consumer migration was silently claimed. The first pass intentionally excludes persistent API caching, curated package inventories, dependency-version dashboards, terminal themes, Bitbucket and Scion. No `nexss_tooler` checkout was available here.
