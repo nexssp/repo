@@ -153,7 +153,7 @@ func (s *Service) aheadBehind(ctx context.Context, root, remoteHead, localHead s
 // localTags returns tag names with the object each tag points at, matching the
 // object ID that git ls-remote reports for refs/tags/<name>.
 func (s *Service) localTags(ctx context.Context, root string) (map[string]string, error) {
-	out, err := s.git(ctx, root, "for-each-ref", "refs/tags", "--format=%(refname:short) %(objectname)")
+	out, err := s.git(ctx, root, "for-each-ref", "refs/tags", "--format=%(refname:strip=2) %(objectname)")
 	if err != nil {
 		return nil, fmt.Errorf("list local tags: %w", err)
 	}

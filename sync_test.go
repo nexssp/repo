@@ -63,6 +63,24 @@ func TestSyncReportsPushedState(t *testing.T) {
 	}
 }
 
+func TestSyncHandlesTagNameThatMatchesBranch(t *testing.T) {
+	work := newSyncFixture(t)
+	gitTest(t, work, "branch", "v1.0.0")
+	gitTest(t, work, "tag", "v1.0.0")
+	gitTest(t, work, "push", "origin", "main", "--tags")
+
+	result, err := New().Sync(context.Background(), SyncRequest{Root: work})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Tags) != 1 || result.Tags[0].Name != "v1.0.0" || result.Tags[0].State != TagSyncStatePushed {
+		t.Fatalf("unexpected tag comparison: %+v", result.Tags)
+	}
+	if !result.Synced || result.UnpushedTags != 0 {
+		t.Fatalf("matching branch/tag name should remain synced: %+v", result)
+	}
+}
+
 func TestSyncDetectsAheadAndDivergedTag(t *testing.T) {
 	work := newSyncFixture(t)
 	gitTest(t, work, "tag", "v1.0.0")
