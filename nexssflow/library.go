@@ -21,6 +21,15 @@ var sources embed.FS
 
 func init() { compiler.Register(ID, Bundle) }
 
+func newChangedPathsAction(provider repository.Provider) *action.BuiltAction[repository.ChangedPathsRequest, repository.ChangedPathsResult] {
+	return action.New[repository.ChangedPathsRequest, repository.ChangedPathsResult](
+		"repo.changed_paths",
+		func(ctx context.Context, req repository.ChangedPathsRequest) (repository.ChangedPathsResult, error) {
+			return provider.ChangedPaths(ctx, req)
+		},
+	).Description("Return changed repository paths selected by the request").Build()
+}
+
 // Bundle returns the reusable repository action library and its public .nflow
 // definitions. The actions are read-only; no operation mutates the worktree.
 func Bundle(_ map[string]string) compiler.Bundle {
@@ -79,7 +88,7 @@ func Bundle(_ map[string]string) compiler.Bundle {
 		ID: ID,
 		Libraries: []action.Library{{
 			Name:    ID,
-			Actions: []action.AnyAction{inspect, files, diff, pack, sync, githubInspect, githubTags, githubNormalize, githubLatestSemver, githubModuleVersions},
+			Actions: []action.AnyAction{inspect, files, diff, newChangedPathsAction(provider), pack, sync, githubInspect, githubTags, githubNormalize, githubLatestSemver, githubModuleVersions},
 		}},
 		SourceModules:   sources,
 		ExportedModules: []string{"nflows/repo.nflow"},
