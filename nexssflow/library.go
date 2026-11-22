@@ -30,6 +30,15 @@ func newChangedPathsAction(provider repository.Provider) *action.BuiltAction[rep
 	).Description("Return changed repository paths selected by the request").Build()
 }
 
+func newUntrackedPathsAction(provider repository.UntrackedPathsProvider) *action.BuiltAction[repository.UntrackedPathsRequest, repository.UntrackedPathsResult] {
+	return action.New[repository.UntrackedPathsRequest, repository.UntrackedPathsResult](
+		"repo.untracked_paths",
+		func(ctx context.Context, req repository.UntrackedPathsRequest) (repository.UntrackedPathsResult, error) {
+			return provider.UntrackedPaths(ctx, req)
+		},
+	).Description("List sorted, non-ignored untracked repository paths").Build()
+}
+
 // Bundle returns the reusable repository action library and its public .nflow
 // definitions. The actions are read-only; no operation mutates the worktree.
 func Bundle(_ map[string]string) compiler.Bundle {
@@ -88,7 +97,7 @@ func Bundle(_ map[string]string) compiler.Bundle {
 		ID: ID,
 		Libraries: []action.Library{{
 			Name:    ID,
-			Actions: []action.AnyAction{inspect, files, diff, newChangedPathsAction(provider), pack, sync, githubInspect, githubTags, githubNormalize, githubLatestSemver, githubModuleVersions},
+			Actions: []action.AnyAction{inspect, files, diff, newChangedPathsAction(provider), newUntrackedPathsAction(provider), pack, sync, githubInspect, githubTags, githubNormalize, githubLatestSemver, githubModuleVersions},
 		}},
 		SourceModules:   sources,
 		ExportedModules: []string{"nflows/repo.nflow"},

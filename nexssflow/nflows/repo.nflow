@@ -35,6 +35,11 @@
   repo.files
 @end
 
+@description "List sorted non-ignored untracked paths"
+@pipeline untracked_paths
+  repo.untracked_paths
+@end
+
 @description "Read the tracked-file diff; pass staged=true for staged changes only"
 @pipeline diff
   repo.diff

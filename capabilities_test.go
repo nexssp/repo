@@ -65,6 +65,37 @@ func TestCapabilitiesReadOnly(t *testing.T) {
 	}
 }
 
+func TestUntrackedPathsListsOnlyNonIgnoredPaths(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git executable is unavailable")
+	}
+	root := t.TempDir()
+	gitTest(t, root, "init", "-b", "main")
+	gitTest(t, root, "config", "user.email", "repo-test@example.invalid")
+	gitTest(t, root, "config", "user.name", "Repository Test")
+	writeTestFile(t, root, ".gitignore", "ignored.go\n")
+	writeTestFile(t, root, "tracked.go", "package example\n")
+	gitTest(t, root, "add", "-A")
+	gitTest(t, root, "commit", "-m", "initial")
+
+	specialName := "line\nbreak.go"
+	if runtime.GOOS == "windows" {
+		specialName = "line-break.go"
+	}
+	writeTestFile(t, root, specialName, "package example\n")
+	writeTestFile(t, root, "untracked.go", "package example\n")
+	writeTestFile(t, root, "ignored.go", "package example\n")
+
+	result, err := New().UntrackedPaths(context.Background(), UntrackedPathsRequest{Root: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := absoluteTestPaths(root, specialName, "untracked.go")
+	if result.Root != root || !equalPaths(result.Paths, want) {
+		t.Fatalf("untracked paths = %+v, want root %q and paths %#v", result, root, want)
+	}
+}
+
 func TestDiffRespectsMaxBytes(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git executable is unavailable")

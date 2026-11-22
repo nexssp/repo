@@ -1,6 +1,6 @@
 # Nexss Repository Capabilities
 
-A read-only Go module for local Git and GitHub repository inspection. Its typed `Provider` is the common contract for thin consumers: `repopeek` uses GitHub inspection, while `srcpack` can reuse local `Files`, `ChangedPaths`, `Diff`, and `Pack` without reimplementing Git traversal or safety limits. `Sync` compares local branch heads and tags with a remote so publishing workflows can verify that everything is pushed. Nexss Flow loads the same provider through the `nexssflow/` bundle and its embedded `.nflow` definitions.
+A read-only Go module for local Git and GitHub repository inspection. Its typed `Provider` is the common contract for thin consumers: `repopeek` uses GitHub inspection, while `srcpack` can reuse local `Files`, `ChangedPaths`, `Diff`, and `Pack` without reimplementing Git traversal or safety limits. The supplemental `UntrackedPathsProvider` lists non-ignored untracked paths without expanding the existing `Provider` interface. `Sync` compares local branch heads and tags with a remote so publishing workflows can verify that everything is pushed. Nexss Flow loads the same provider through the `nexssflow/` bundle and its embedded `.nflow` definitions.
 
 ## Quick start
 
@@ -35,6 +35,7 @@ Import `github.com/nexssp/repo` and use the same provider for local and GitHub o
 provider := repo.New()
 summary, err := provider.Inspect(ctx, repo.InspectRequest{Root: "."})
 files, err := provider.Files(ctx, repo.FilesRequest{Root: ".", Path: "src"})
+untracked, err := provider.UntrackedPaths(ctx, repo.UntrackedPathsRequest{Root: "."})
 diff, err := provider.Diff(ctx, repo.DiffRequest{Root: "."})
 changes, err := provider.ChangedPaths(ctx, repo.ChangedPathsRequest{Root: ".", Modified: true, Staged: true})
 pack, err := provider.Pack(ctx, repo.PackRequest{Root: ".", MaxFiles: 100, MaxBytes: 500_000})
@@ -44,7 +45,7 @@ tags, err := provider.InspectGitHubTags(ctx, repo.GitHubRequest{Repository: "own
 latest, err := provider.LatestGitHubSemverTag(ctx, repo.GitHubRequest{Repository: "nexssp/kernel"})
 ```
 
-`ChangedPaths` returns sorted, unique absolute paths. `Modified` includes tracked changes against `HEAD` and non-ignored untracked files; `Since` compares the working tree with a base revision and takes precedence over `Modified`; `Staged` adds index-to-`HEAD` paths. The path list uses NUL-delimited Git output, so filenames containing spaces or newlines are preserved.
+`UntrackedPaths` returns sorted, unique absolute paths for non-ignored untracked files. `ChangedPaths` returns sorted, unique absolute paths; `Modified` includes tracked changes against `HEAD` and non-ignored untracked files; `Since` compares the working tree with a base revision and takes precedence over `Modified`; `Staged` adds index-to-`HEAD` paths. The path lists use NUL-delimited Git output, so filenames containing spaces or newlines are preserved.
 
 `SyncResult.Synced` is true when the local head matches the remote branch head and no local tag is missing or diverged on the remote; shallow or partial clones get `counts_known=false` and a warning instead of guessed ahead/behind numbers.
 
@@ -72,6 +73,7 @@ Replace `v0.1.0` with the release version you use. The exported pipelines are:
 | `repo.pipeline.github_latest_semver` | `repo.github_latest_semver` | `repository` |
 | `repo.pipeline.github_module_versions` | `repo.github_module_versions` | `requirements`, `latest_versions` |
 | `repo.pipeline.files` | `repo.files` | `root`, optional `path` |
+| `repo.pipeline.untracked_paths` | `repo.untracked_paths` | `root` |
 | `repo.pipeline.diff` | `repo.diff` | `root`, optional `staged`, `max_bytes` |
 | `repo.pipeline.pack` | `repo.pack` | `root`, optional `path`, `max_files`, `max_bytes` |
 | `repo.pipeline.sync` | `repo.sync` | `root`, optional `remote` (defaults to `origin`) |

@@ -162,6 +162,36 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResult, err
 	return result, nil
 }
 
+// UntrackedPaths returns sorted, unique absolute paths for non-ignored untracked files.
+func (s *Service) UntrackedPaths(ctx context.Context, req UntrackedPathsRequest) (UntrackedPathsResult, error) {
+	root, err := s.repositoryRoot(ctx, req.Root)
+	if err != nil {
+		return UntrackedPathsResult{}, err
+	}
+	paths, err := s.listUntrackedPaths(ctx, root)
+	if err != nil {
+		return UntrackedPathsResult{}, err
+	}
+	return UntrackedPathsResult{Root: root, Paths: paths}, nil
+}
+
+func (s *Service) listUntrackedPaths(ctx context.Context, root string) ([]string, error) {
+	output, err := s.git(ctx, root, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files untracked paths: %w", err)
+	}
+	paths := make([]string, 0)
+	for _, raw := range bytes.Split(output, []byte{0}) {
+		if len(raw) == 0 {
+			continue
+		}
+		path := filepath.Clean(filepath.Join(root, filepath.FromSlash(string(raw))))
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
 func (s *Service) Diff(ctx context.Context, req DiffRequest) (DiffResult, error) {
 	root, err := s.repositoryRoot(ctx, req.Root)
 	if err != nil {
@@ -233,11 +263,13 @@ func (s *Service) ChangedPaths(ctx context.Context, req ChangedPathsRequest) (Ch
 		}
 		addPaths(output)
 
-		untracked, err := s.git(ctx, root, "ls-files", "--others", "--exclude-standard", "-z")
+		untracked, err := s.listUntrackedPaths(ctx, root)
 		if err != nil {
-			return ChangedPathsResult{}, fmt.Errorf("git ls-files untracked paths: %w", err)
+			return ChangedPathsResult{}, err
 		}
-		addPaths(untracked)
+		for _, path := range untracked {
+			seen[path] = struct{}{}
+		}
 	}
 
 	if req.Staged {

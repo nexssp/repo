@@ -27,6 +27,12 @@ type Provider interface {
 	InspectGitHub(context.Context, GitHubRequest) (GitHubInspection, error)
 }
 
+// UntrackedPathsProvider exposes untracked-path listing without expanding the
+// existing Provider contract.
+type UntrackedPathsProvider interface {
+	UntrackedPaths(context.Context, UntrackedPathsRequest) (UntrackedPathsResult, error)
+}
+
 // GitHubOptions configures the GitHub REST API client. Leave APIBaseURL empty to
 // use github.com. Token overrides GITHUB_TOKEN/GH_TOKEN and gh auth login.
 type GitHubOptions struct {
@@ -83,6 +89,17 @@ type FilesResult struct {
 	Root  string `json:"root"`
 	Files []File `json:"files"`
 	Count int    `json:"count"`
+}
+
+// UntrackedPathsRequest selects non-ignored untracked paths in a local worktree.
+type UntrackedPathsRequest struct {
+	Root string `json:"root,omitempty"`
+}
+
+// UntrackedPathsResult returns sorted, unique absolute untracked paths.
+type UntrackedPathsResult struct {
+	Root  string   `json:"root"`
+	Paths []string `json:"paths"`
 }
 
 type DiffRequest struct {

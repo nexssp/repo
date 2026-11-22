@@ -1,0 +1,4 @@
+@require github.com/nexssp/repo as repo
+@include repo:nflows/repo.nflow AS repo
+@assert: len(result.paths) == 1
+repo.pipeline.untracked_paths

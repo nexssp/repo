@@ -22,7 +22,7 @@ func TestBundleExportsRunnableModule(t *testing.T) {
 	if _, err := fs.Stat(bundle.SourceModules, bundle.ExportedModules[0]); err != nil {
 		t.Fatalf("exported module missing: %v", err)
 	}
-	if len(bundle.Libraries) != 1 || len(bundle.Libraries[0].Actions) != 11 {
+	if len(bundle.Libraries) != 1 || len(bundle.Libraries[0].Actions) != 12 {
 		t.Fatalf("unexpected action libraries: %#v", bundle.Libraries)
 	}
 	hasChangedPaths := false
@@ -40,6 +40,22 @@ func TestBundleExportsRunnableModule(t *testing.T) {
 	}
 	if !hasChangedPaths {
 		t.Fatal("bundle is missing repo.changed_paths")
+	}
+	hasUntrackedPaths := false
+	for _, bundleAction := range bundle.Libraries[0].Actions {
+		metadata := bundleAction.Describe()
+		if metadata == nil || metadata.Name != "repo.untracked_paths" {
+			continue
+		}
+		if _, ok := bundleAction.(interface {
+			Do(context.Context, repository.UntrackedPathsRequest) (repository.UntrackedPathsResult, error)
+		}); !ok {
+			t.Fatal("repo.untracked_paths is not a typed request/response action")
+		}
+		hasUntrackedPaths = true
+	}
+	if !hasUntrackedPaths {
+		t.Fatal("bundle is missing repo.untracked_paths")
 	}
 	source, err := fs.ReadFile(bundle.SourceModules, bundle.ExportedModules[0])
 	if err != nil {
@@ -86,6 +102,27 @@ func TestChangedPathsActionDelegatesToProvider(t *testing.T) {
 	}
 }
 
+func TestUntrackedPathsActionDelegatesToProvider(t *testing.T) {
+	ctx := context.Background()
+	request := repository.UntrackedPathsRequest{Root: "/checkout"}
+	wantResult := repository.UntrackedPathsResult{Root: "/checkout", Paths: []string{"/checkout/a.go"}}
+	provider := &recordingUntrackedPathsProvider{result: wantResult}
+
+	gotResult, err := newUntrackedPathsAction(provider).Do(ctx, request)
+	if err != nil {
+		t.Fatalf("untracked paths action error = %v", err)
+	}
+	if provider.callContext != ctx {
+		t.Fatal("provider did not receive the action context")
+	}
+	if provider.request != request {
+		t.Fatalf("provider request = %+v, want %+v", provider.request, request)
+	}
+	if !reflect.DeepEqual(gotResult, wantResult) {
+		t.Fatalf("untracked paths result = %+v, want %+v", gotResult, wantResult)
+	}
+}
+
 type recordingChangedPathsProvider struct {
 	repository.Provider
 	callContext context.Context
@@ -94,6 +131,19 @@ type recordingChangedPathsProvider struct {
 }
 
 func (p *recordingChangedPathsProvider) ChangedPaths(ctx context.Context, request repository.ChangedPathsRequest) (repository.ChangedPathsResult, error) {
+	p.callContext = ctx
+	p.request = request
+	return p.result, nil
+}
+
+type recordingUntrackedPathsProvider struct {
+	repository.UntrackedPathsProvider
+	callContext context.Context
+	request     repository.UntrackedPathsRequest
+	result      repository.UntrackedPathsResult
+}
+
+func (p *recordingUntrackedPathsProvider) UntrackedPaths(ctx context.Context, request repository.UntrackedPathsRequest) (repository.UntrackedPathsResult, error) {
 	p.callContext = ctx
 	p.request = request
 	return p.result, nil
