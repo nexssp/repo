@@ -3,8 +3,8 @@ module github.com/nexssp/repo
 go 1.27.4
 
 require (
-	github.com/nexssp/flow v0.96.0
-	github.com/nexssp/kernel v0.40.3
+	github.com/nexssp/flow v0.102.1
+	github.com/nexssp/kernel v1.0.0
 	golang.org/x/mod v0.43.0
 )
 
